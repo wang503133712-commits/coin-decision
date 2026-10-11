@@ -1,0 +1,9 @@
+.gradle/
+.kotlin/
+**/build/
+local.properties
+signing.properties
+.signing/
+*.hprof
+captures/
+.idea/

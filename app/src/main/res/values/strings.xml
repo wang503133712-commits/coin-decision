@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">偏心硬币</string>
+    <string name="tagline" formatted="false">70% 交给运气，30% 听从自己</string>
+    <string name="boundary">用于日常选择和自我梳理，不保证选择正确，最终决定权在你。</string>
+</resources>
