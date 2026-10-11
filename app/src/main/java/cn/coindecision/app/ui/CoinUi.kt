@@ -9,11 +9,14 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.*
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.selection.selectable
@@ -42,12 +45,17 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -146,15 +154,30 @@ private val Champagne = Color(0xFFE9C98B)
         Text(if (source == Source.OFFLINE) "离线通用题目" else "AI 生成相关题目", Modifier.padding(horizontal = 12.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
     }
 }
-@Composable private fun Faces(session: Session) {
+@Composable private fun Faces(session: Session, onEdit: ((Face, String) -> Unit)? = null) {
+    var editing by rememberSaveable(session.decisionId) { mutableStateOf<Face?>(null) }
     Panel {
-        FaceRow("A", "正面 A", session.optionA)
+        FaceRow("A", "正面 A", session.optionA, if (onEdit == null) null else { { editing = Face.A } })
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
-        FaceRow("B", "反面 B", session.optionB)
+        FaceRow("B", "反面 B", session.optionB, if (onEdit == null) null else { { editing = Face.B } })
+    }
+    editing?.let { face ->
+        var draft by rememberSaveable(session.decisionId, face) { mutableStateOf(if (face == Face.A) session.optionA else session.optionB) }
+        val other = if (face == Face.A) session.optionB else session.optionA
+        val invalid = draft.isBlank() || draft.trim() == other.trim()
+        AlertDialog(onDismissRequest = { editing = null }, title = { Text(if (face == Face.A) "修改正面 A" else "修改反面 B") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(draft, { draft = it.take(120) }, label = { Text("这面的选择") },
+                    supportingText = { Text("${draft.length}/120") }, isError = invalid, modifier = Modifier.fillMaxWidth())
+                Text(if (invalid) "请填写与另一面不同的选择。" else if (session.questions.isNotEmpty()) "修改后重新确认，并重新回答五题。" else "保存后请重新确认两面含义。", style = MaterialTheme.typography.bodySmall)
+            } }, confirmButton = { TextButton(onClick = { onEdit?.invoke(face, draft); editing = null }, enabled = !invalid) { Text("保存修改") } },
+            dismissButton = { TextButton(onClick = { editing = null }) { Text("取消") } })
     }
 }
-@Composable private fun FaceRow(letter: String, label: String, text: String) {
-    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+@Composable private fun FaceRow(letter: String, label: String, text: String, onEdit: (() -> Unit)? = null) {
+    val modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+    Row(modifier.then(if (onEdit != null) Modifier.clickable(role = Role.Button, onClickLabel = "修改$label", onClick = onEdit).padding(vertical = 8.dp) else Modifier),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Box(Modifier.size(38.dp), contentAlignment = Alignment.Center) {
             Text(letter, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         }
@@ -162,6 +185,7 @@ private val Champagne = Color(0xFFE9C98B)
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(text, fontWeight = FontWeight.Medium)
         }
+        if (onEdit != null) Text("修改", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
     }
 }
 @Composable private fun Hero() {
@@ -237,7 +261,7 @@ private val Champagne = Color(0xFFE9C98B)
         }
         Stage.CONFIRM -> {
             Heading("先确认，你的两种选择", s.matter)
-            Faces(s)
+            Faces(s, vm::editFace)
             var checked by rememberSaveable(s.decisionId, s.matter, s.optionA, s.optionB) { mutableStateOf(false) }
             Row(Modifier.fillMaxWidth().toggleableCompat(checked) { checked = it }, verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked, null); Text("我确认 A/B 是不同、互斥的安排，文字准确表达我的意思。", Modifier.weight(1f))
@@ -249,33 +273,10 @@ private val Champagne = Color(0xFFE9C98B)
             Heading("正在准备五道题", "题目只帮助梳理选择，最终投币由本机完成。")
             SourceLabel(s.source); CircularProgressIndicator(); Primary("取消出题", onClick = vm::cancelGeneration)
         }
-        Stage.ANSWER -> {
-            SourceLabel(s.source)
-            Text("${s.index + 1} / 5", color = MaterialTheme.colorScheme.primary)
-            LinearProgressIndicator(progress = { (s.index + 1) / 5f }, modifier = Modifier.fillMaxWidth(),
-                trackColor = MaterialTheme.colorScheme.outlineVariant)
-            val q = s.questions[s.index]
-            Heading(q.text)
-            Text("A：${s.optionA}\nB：${s.optionB}", style = MaterialTheme.typography.bodySmall)
-            val answer = s.answers[s.index]
-            q.options.forEach { option ->
-                val selected = answer.kind == AnswerKind.SELECTED && answer.optionId == option.id
-                Surface(shape = RoundedCornerShape(20.dp), border = BorderStroke(if (selected) 1.5.dp else 0.5.dp,
-                    if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f)),
-                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface) {
-                    Row(Modifier.fillMaxWidth().selectable(selected, role = Role.RadioButton, onClick = { vm.answer(option.id) }).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected, null); Text(option.label, Modifier.weight(1f).padding(end = 8.dp, top = 6.dp, bottom = 6.dp))
-                    }
-                }
-            }
-            if (answer.kind == AnswerKind.SKIPPED) Text("本题已主动跳过，按中立处理。", color = MaterialTheme.colorScheme.primary)
-            TextButton(onClick = { vm.answer(null); vm.next() }) { Text("跳过这题（按中立）") }
-            Primary(if (s.index == 4) "准备投币" else "下一题", answer.kind != AnswerKind.UNANSWERED, vm::next)
-            TextButton(onClick = vm::back) { Text(if (s.index == 0) "返回确认" else "上一题") }
-        }
+        Stage.ANSWER -> QuestionPage(s, vm)
         Stage.READY -> {
             Heading("留一点空间，给运气", s.matter)
-            SourceLabel(s.source); Coin(null); Faces(s)
+            SourceLabel(s.source); Coin(null); Faces(s, if (state.tossing) null else vm::editFace)
             Text("五题已完成。70% 公平硬币 + 30% 本次答案倾向；正面始终在 35%～65% 之间。")
             Primary(if (state.tossing) "正在保存结果…" else "投出这枚硬币", !state.tossing, vm::toss)
             BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -305,6 +306,52 @@ private val Champagne = Color(0xFFE9C98B)
             Heading(if (s.stage == Stage.BLOCKED) "这件事，不交给硬币" else "先把选择说清楚")
             Notice(s.message)
             Primary("返回修改事项和两面含义", onClick = vm::back)
+        }
+    }
+}
+@Composable private fun QuestionPage(s: Session, vm: CoinViewModel) {
+    SourceLabel(s.source)
+    Text("${s.index + 1} / 5", color = MaterialTheme.colorScheme.primary)
+    LinearProgressIndicator(progress = { (s.index + 1) / 5f }, modifier = Modifier.fillMaxWidth(), trackColor = MaterialTheme.colorScheme.outlineVariant)
+    val transition = updateTransition(s.index, label = "questionPosition")
+    val moving = transition.currentState != transition.targetState
+    val threshold = with(LocalDensity.current) { 56.dp.toPx() }
+    transition.AnimatedContent(transitionSpec = {
+        val direction = if (targetState > initialState) 1 else -1
+        (slideInHorizontally(tween(220)) { it * direction } + fadeIn(tween(220))) togetherWith
+            (slideOutHorizontally(tween(220)) { -it * direction } + fadeOut(tween(220)))
+    }) { index ->
+        val q = s.questions[index]
+        val answer = s.answers[index]
+        val enabled = !moving && index == s.index
+        Column(Modifier.fillMaxWidth().testTag("question-pager").pointerInput(s.decisionId, index, enabled) {
+            var distance = 0f
+            detectHorizontalDragGestures(onDragStart = { distance = 0f }, onHorizontalDrag = { change, amount -> change.consume(); distance += amount },
+                onDragEnd = {
+                    if (enabled && distance < -threshold && index > 0) vm.previous()
+                    else if (enabled && distance > threshold && answer.kind != AnswerKind.UNANSWERED) vm.next()
+                })
+        }, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Heading(q.text)
+            Text("A：${s.optionA}\nB：${s.optionB}", style = MaterialTheme.typography.bodySmall)
+            q.options.forEach { option ->
+                val selected = answer.kind == AnswerKind.SELECTED && answer.optionId == option.id
+                Surface(shape = RoundedCornerShape(20.dp), border = BorderStroke(if (selected) 1.5.dp else .5.dp,
+                    if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f)),
+                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface) {
+                    Row(Modifier.fillMaxWidth().selectable(selected, enabled = enabled, role = Role.RadioButton,
+                        onClick = { vm.answerAndAdvance(q.id, option.id) }).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected, null, enabled = enabled); Text(option.label, Modifier.weight(1f).padding(end = 8.dp, top = 6.dp, bottom = 6.dp))
+                    }
+                }
+            }
+            if (answer.kind == AnswerKind.SKIPPED) Text("本题已主动跳过，按中立处理。", color = MaterialTheme.colorScheme.primary)
+            TextButton(onClick = { vm.answerAndAdvance(q.id, null) }, enabled = enabled) { Text("跳过这题（按中立）") }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = vm::back, enabled = enabled) { Text(if (index == 0) "返回确认" else "← 上一题") }
+                Text("选答案，自动向右继续 →", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (index > 0) Text("向左滑返回上一题", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -360,10 +407,10 @@ private fun Modifier.toggleableCompat(value: Boolean, onChange: (Boolean) -> Uni
     val context = LocalContext.current
     LaunchedEffect(result.tossId) {
         if (ValueAnimator.areAnimatorsEnabled()) {
-            if (sound) audio.play(CoinSound.launch())
+            if (sound) audio.play(CoinSound.launch(context))
             progress.animateTo(1f, tween(1600, easing = LinearOutSlowInEasing))
         }
-        if (sound) audio.play(CoinSound.landing())
+        if (sound) audio.play(CoinSound.landing(context))
         if (vibration) {
             @Suppress("DEPRECATION")
             val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
@@ -410,9 +457,18 @@ private fun Modifier.toggleableCompat(value: Boolean, onChange: (Boolean) -> Uni
         s.config?.let { Text("模型快照：${it.model}\n接口：${it.baseUrl}") }
     }
     if (state != null) {
-        Text("看到结果，你的感觉是？（可选，不改结果）", style = MaterialTheme.typography.bodyMedium)
+        val haptic = LocalHapticFeedback.current
+        Text("看到结果，你的感觉是？", style = MaterialTheme.typography.bodyMedium)
         listOf("松了一口气", "有点失望", "没什么感觉").forEach { text ->
-            OutlinedButton(onClick = { vm.feedback(text) }, modifier = Modifier.fillMaxWidth()) { Text(if (record.feedback == text) "✓ $text" else text) }
+            val selected = record.feedback == text
+            val color by animateColorAsState(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface, tween(160), label = "feedbackSelection")
+            val interaction = remember { MutableInteractionSource() }
+            val pressed by interaction.collectIsPressedAsState()
+            val scale by animateFloatAsState(if (pressed) .97f else 1f, spring(stiffness = 700f), label = "feedbackPress")
+            OutlinedButton(onClick = { if (state.settings.vibration) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); vm.feedback(text) },
+                interactionSource = interaction, colors = ButtonDefaults.outlinedButtonColors(containerColor = color),
+                border = BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
+                modifier = Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale }.semantics { this.selected = selected }) { Text(if (selected) "✓ $text" else text) }
         }
         Primary("开始一个新决策", onClick = vm::newDecision)
         TextButton(onClick = vm::again) { Text("明确再投一次（保留之前结果）") }

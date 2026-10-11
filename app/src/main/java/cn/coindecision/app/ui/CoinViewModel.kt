@@ -68,6 +68,18 @@ class CoinViewModel(private val app: CoinApplication, private val testAiOverride
         // 事项变更后重提取，不能沿用模型或旧草稿中另一件事的两面。
         edit(matter, "", "")
     }
+    fun editFace(face: Face, value: String) {
+        val state = _ui.value
+        if (state.loading || state.tossing || state.session.stage !in listOf(Stage.CONFIRM, Stage.READY)) return
+        val s = state.session
+        val a = if (face == Face.A) value.trim() else s.optionA
+        val b = if (face == Face.B) value.trim() else s.optionB
+        try { Contract.request(s.request().copy(optionA = a, optionB = b)) }
+        catch (e: IllegalArgumentException) { notice(e.message ?: "请输入有效的两种选择"); return }
+        if (a == s.optionA && b == s.optionB) return
+        edit(s.matter, a, b)
+        confirm()
+    }
     fun confirm() {
         try {
             var s = _ui.value.session
@@ -157,6 +169,13 @@ class CoinViewModel(private val app: CoinApplication, private val testAiOverride
         if (s.answers.getOrNull(s.index)?.kind == AnswerKind.UNANSWERED) { notice("请选择一个选项，或主动跳过"); return }
         change { it.copy(index = minOf(it.index + 1, 4), stage = if (it.index == 4) Stage.READY else Stage.ANSWER) }
     }
+    fun answerAndAdvance(questionId: String, optionId: String?) {
+        val s = _ui.value.session
+        if (s.stage != Stage.ANSWER || s.questions.getOrNull(s.index)?.id != questionId) return
+        if (optionId != null && s.questions[s.index].options.none { it.id == optionId }) return
+        answer(optionId)
+        next()
+    }
     fun previous() { change { it.copy(index = maxOf(0, it.index - 1), stage = Stage.ANSWER) } }
     fun toss() {
         val state = _ui.value
@@ -207,7 +226,7 @@ class CoinViewModel(private val app: CoinApplication, private val testAiOverride
     } }
     fun clearHistory() { viewModelScope.launch { try { val s = repo.clear(); _ui.update { it.copy(session = s, result = null, detail = null) } } catch (_: Exception) { notice("清空失败") } } }
     fun feedback(text: String) { val id = _ui.value.result?.tossId ?: return; viewModelScope.launch {
-        try { repo.feedback(id, text); _ui.update { it.copy(result = it.result?.copy(feedback = text)) } } catch (_: Exception) { notice("反馈保存失败") }
+        try { repo.feedback(id, text); _ui.update { if (it.result?.tossId == id) it.copy(result = it.result.copy(feedback = text), notice = "已记录你的感受") else it } } catch (_: Exception) { notice("反馈保存失败") }
     } }
     fun saveSettings(value: AppSettings, key: String) { clearModelList(); viewModelScope.launch {
         try {

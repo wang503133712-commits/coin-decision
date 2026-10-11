@@ -93,11 +93,22 @@ class OfflineUiTest {
         rule.onNodeWithText("我确认 A/B 是不同、互斥的安排，文字准确表达我的意思。").performClick()
         rule.onNodeWithText("开始了解自己").performScrollTo().performClick()
         rule.waitUntil(10000) { rule.onAllNodesWithText("1 / 5").fetchSemanticsNodes().isNotEmpty() }
-        // 回答、返回、主动跳过，最终全部完成。
+        rule.onNodeWithText("下一题").assertDoesNotExist()
+        rule.onNodeWithText("暂时放下别人的期待，你更愿意选择哪一种安排？").performScrollTo().performTouchInput { swipeRight() }
+        rule.onNodeWithText("1 / 5").assertExists()
         rule.onNodeWithText("明显更倾向 A：这周末去露营").performScrollTo().performClick()
-        rule.onNodeWithText("下一题").performScrollTo().performClick()
-        rule.onNodeWithText("上一题").performScrollTo().performClick()
-        rule.onNodeWithText("下一题").performScrollTo().performClick()
+        rule.waitUntil(5000) { rule.onAllNodesWithText("2 / 5").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("比较两种安排可能带来的体验，你更期待哪一种？").performScrollTo().performTouchInput { swipeRight() }
+        rule.onNodeWithText("2 / 5").assertExists()
+        rule.onNodeWithText("比较两种安排可能带来的体验，你更期待哪一种？").performScrollTo().performTouchInput { swipeLeft() }
+        rule.waitUntil(5000) { rule.onAllNodesWithText("1 / 5").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("明显更倾向 A：这周末去露营").assertIsSelected()
+        saveScreenshot("questions-1.4.2.png")
+        rule.onNodeWithText("暂时放下别人的期待，你更愿意选择哪一种安排？").performScrollTo().performTouchInput { swipeRight() }
+        rule.waitUntil(5000) { rule.onAllNodesWithText("2 / 5").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("← 上一题").performScrollTo().performClick()
+        rule.waitUntil(5000) { rule.onAllNodesWithText("1 / 5").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("明显更倾向 A：这周末去露营").performScrollTo().performClick()
         repeat(4) { i ->
             if (i == 2) rule.onNodeWithText("考虑两种安排的不确定性，你觉得哪种更为稳妥？").assertExists()
             rule.onNodeWithText("跳过这题（按中立）").performScrollTo().performClick()
@@ -109,10 +120,21 @@ class OfflineUiTest {
         rule.onNodeWithText("收起权重计算公式").performScrollTo().performClick()
         rule.onNodeWithText("投出这枚硬币").performScrollTo().performClick()
         rule.waitUntil(15000) { rule.onAllNodesWithText("这一次，硬币落在").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("看到结果，你的感觉是？（可选，不改结果）").assertDoesNotExist()
+        rule.onNodeWithText("看到结果，你的感觉是？").performScrollTo().assertExists()
+        rule.onNodeWithText("松了一口气").performScrollTo().performClick()
+        rule.waitUntil(5000) { rule.onAllNodesWithText("✓ 松了一口气").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("✓ 松了一口气").assertIsSelected()
+        rule.onNodeWithText("有点失望").performScrollTo().performClick()
+        rule.waitUntil(5000) { rule.onAllNodesWithText("✓ 有点失望").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("✓ 有点失望").assertIsSelected()
+        rule.onNodeWithText("松了一口气").assertIsNotSelected()
+        saveScreenshot("feedback-1.4.2.png")
         rule.onNodeWithText("展开概率与回答说明").performScrollTo().performClick()
         rule.onNodeWithText("s = 0.60 · 正面 53% · 反面 47%").assertExists()
         rule.activityRule.scenario.recreate()
         rule.waitUntil(10000) { rule.onAllNodesWithText("这一次，硬币落在").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("✓ 有点失望").assertIsSelected()
         rule.onNodeWithText("返回").performClick()
         rule.onNodeWithText("试试示例：周末露营").assertExists()
         rule.onNodeWithText("历史").performClick()
@@ -156,14 +178,49 @@ class OfflineUiTest {
         saveScreenshot("ready-screen-1.2.png")
         rule.onNodeWithText("修改回答").performClick()
         rule.onNodeWithText("5 / 5").assertExists()
-        rule.onNodeWithText("准备投币").performScrollTo().performClick()
+        rule.onNodeWithText("跳过这题（按中立）").performScrollTo().performClick()
         rule.onNodeWithContentDescription("待投掷硬币，尚未产生结果").assertExists()
     }
     private fun saveScreenshot(name: String) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        File(context.filesDir, name).outputStream().use {
+        File(context.getExternalFilesDir(null), name).outputStream().use {
             rule.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
         }
+    }
+    @Test fun identifiedFacesCanBeEditedAndCancelled() {
+        rule.waitUntil(10000) { rule.onAllNodesWithText("试试示例：周末露营").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("试试示例：周末露营").performScrollTo().performClick()
+        rule.onNodeWithText("确认两面含义").performScrollTo().performClick()
+        rule.onNodeWithText("我确认 A/B 是不同、互斥的安排，文字准确表达我的意思。").performClick()
+        rule.onNodeWithText("这周末去露营").performClick()
+        rule.onNodeWithText("修改正面 A").assertExists()
+        rule.onNode(hasSetTextAction()).performTextReplacement("临时修改")
+        rule.onNodeWithText("取消").performClick()
+        rule.onNodeWithText("这周末去露营").assertExists()
+        rule.onNodeWithText("这周末去露营").performClick()
+        rule.onNode(hasSetTextAction()).performTextReplacement("")
+        rule.onNodeWithText("保存修改").assertIsNotEnabled()
+        rule.onNode(hasSetTextAction()).performTextReplacement("这周末不去露营")
+        rule.onNodeWithText("保存修改").assertIsNotEnabled()
+        rule.onNode(hasSetTextAction()).performTextReplacement("周六去露营")
+        rule.onNodeWithText("保存修改").performClick()
+        rule.waitUntil(5000) { rule.onAllNodesWithText("周六去露营").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("我确认 A/B 是不同、互斥的安排，文字准确表达我的意思。").assertIsOff()
+        rule.onNodeWithText("开始了解自己").assertIsNotEnabled()
+        rule.onNodeWithText("这周末不去露营").performClick()
+        rule.onNodeWithText("修改反面 B").assertExists()
+        rule.onNode(hasSetTextAction()).performTextReplacement("周末在家休息")
+        rule.onNodeWithText("保存修改").performClick()
+        rule.waitUntil(5000) { rule.onAllNodesWithText("周末在家休息").fetchSemanticsNodes().isNotEmpty() }
+        rule.activityRule.scenario.recreate()
+        rule.waitUntil(10000) { rule.onAllNodesWithText("周末在家休息").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("周六去露营").assertExists()
+        saveScreenshot("edited-faces-1.4.2.png")
+        rule.onNodeWithText("我确认 A/B 是不同、互斥的安排，文字准确表达我的意思。").performClick()
+        rule.onNodeWithText("开始了解自己").performScrollTo().performClick()
+        rule.waitUntil(10000) { rule.onAllNodesWithText("1 / 5").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("明显更倾向 A：周六去露营").assertExists()
+        rule.onNodeWithText("明显更倾向 B：周末在家休息").assertExists()
     }
     @Test fun blockedFlowNeverShowsToss() {
         rule.waitUntil(10000) { rule.onAllNodesWithText("你在犹豫什么？").fetchSemanticsNodes().isNotEmpty() }

@@ -4,6 +4,7 @@ import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import cn.coindecision.app.ui.CoinAudio
 import cn.coindecision.app.ui.CoinSound
 import org.junit.Assert.*
@@ -14,8 +15,9 @@ import org.junit.runner.RunWith
 class CoinAudioTest {
     @Test fun coinEffectsUseMediaVolumeAndActuallyPlay() {
         val audio = CoinAudio()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
         try {
-            for (samples in listOf(CoinSound.launch(), CoinSound.landing())) {
+            for (samples in listOf(CoinSound.launch(context), CoinSound.landing(context))) {
                 audio.play(samples)
                 val field = CoinAudio::class.java.getDeclaredField("track").apply { isAccessible = true }
                 val track = field.get(audio) as? AudioTrack

@@ -3,26 +3,21 @@ package cn.coindecision.app.ui
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
-import kotlin.math.PI
-import kotlin.math.exp
-import kotlin.math.sin
+import android.content.Context
+import cn.coindecision.app.R
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
-/** 原创短音色，只用本地 PCM；媒体音量与静音由系统控制。 */
+/** 本地实录硬币 PCM；来源和 CC0 许可见 AUDIO_LICENSES.md。 */
 object CoinSound {
     const val rate = 22050
-    fun launch(): ShortArray = ShortArray((rate * .17).toInt()) { i ->
-        val t = i.toDouble() / rate
-        val fade = sin(PI * t / .17).coerceAtLeast(0.0)
-        val envelope = fade * fade
-        val value = sin(2 * PI * (450 * t + 1800 * t * t)) * .045 + sin(2 * PI * 1900 * t) * .018
-        (value * envelope * Short.MAX_VALUE).toInt().toShort()
-    }
-    fun landing(): ShortArray = ShortArray((rate * .22).toInt()) { i ->
-        val t = i.toDouble() / rate
-        val attack = (t / .003).coerceAtMost(1.0)
-        val value = (sin(2 * PI * 2100 * t) * .07 + sin(2 * PI * 3250 * t) * .025) * exp(-t * 25) +
-            sin(2 * PI * 210 * t) * .035 * exp(-t * 50)
-        (value * attack * Short.MAX_VALUE).toInt().toShort()
+    fun launch(context: Context) = read(context, R.raw.coin_launch)
+    fun landing(context: Context) = read(context, R.raw.coin_landing)
+    private fun read(context: Context, resource: Int) = context.resources.openRawResource(resource).use { decode(it.readBytes()) }
+    fun decode(bytes: ByteArray): ShortArray {
+        require(bytes.isNotEmpty() && bytes.size % 2 == 0) { "无效 PCM 音效" }
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+        return ShortArray(buffer.remaining()).also { buffer.get(it) }
     }
 }
 class CoinAudio {

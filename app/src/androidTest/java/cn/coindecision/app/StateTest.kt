@@ -15,6 +15,51 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class StateTest {
+    @Test fun editingOneFaceInvalidatesQuestionsAndKeepsOtherFace() = runBlocking {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as CoinApplication
+        app.repository.clear()
+        val vm = withContext(Dispatchers.Main) { CoinViewModel(app) }
+        val store = ViewModelStore().apply { put("test", vm) }
+        try {
+            withTimeout(10000) { vm.ui.first { !it.loading } }
+            withContext(Dispatchers.Main) { vm.edit("要不要去露营？", "去露营", "在家休息"); vm.confirm() }
+            val original = vm.ui.value.session
+            withContext(Dispatchers.Main) { vm.editFace(Face.A, "在家休息"); vm.editFace(Face.A, ""); vm.editFace(Face.A, "x".repeat(121)) }
+            assertEquals(original, vm.ui.value.session)
+            withContext(Dispatchers.Main) { vm.generate(offline = true) }
+            withTimeout(10000) { vm.ui.first { it.session.stage == Stage.ANSWER } }
+            withContext(Dispatchers.Main) { repeat(5) { vm.answerAndAdvance(vm.ui.value.session.questions[vm.ui.value.session.index].id, null) } }
+            assertEquals(Stage.READY, vm.ui.value.session.stage)
+            withContext(Dispatchers.Main) { vm.editFace(Face.A, " 周六露营 ") }
+            val changed = vm.ui.value.session
+            assertEquals(Stage.CONFIRM, changed.stage); assertEquals(original.matter, changed.matter)
+            assertEquals("周六露营", changed.optionA); assertEquals("在家休息", changed.optionB)
+            assertTrue(changed.questions.isEmpty()); assertTrue(changed.answers.isEmpty()); assertNull(changed.activeTossId)
+            withContext(Dispatchers.Main) { vm.editFace(Face.B, "周末看电影") }
+            assertEquals("周六露营", vm.ui.value.session.optionA); assertEquals("周末看电影", vm.ui.value.session.optionB)
+        } finally { withContext(Dispatchers.Main) { store.clear() } }
+    }
+    @Test fun choosingAnswerAdvancesOnceAndReturnKeepsChoice() = runBlocking {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as CoinApplication
+        app.repository.clear()
+        val vm = withContext(Dispatchers.Main) { CoinViewModel(app) }
+        val store = ViewModelStore().apply { put("test", vm) }
+        try {
+            withTimeout(10000) { vm.ui.first { !it.loading } }
+            withContext(Dispatchers.Main) { vm.edit("要不要去露营？", "去露营", "在家休息"); vm.confirm(); vm.generate(offline = true) }
+            val q = withTimeout(10000) { vm.ui.first { it.session.stage == Stage.ANSWER }.session.questions.first() }
+            withContext(Dispatchers.Main) { vm.answerAndAdvance(q.id, "unknown") }
+            assertEquals(0, vm.ui.value.session.index)
+            withContext(Dispatchers.Main) { vm.answerAndAdvance(q.id, q.options.first().id); vm.answerAndAdvance(q.id, q.options.last().id) }
+            assertEquals(1, vm.ui.value.session.index)
+            withContext(Dispatchers.Main) { vm.previous() }
+            assertEquals(q.options.first().id, vm.ui.value.session.answers.first().optionId)
+            withContext(Dispatchers.Main) { vm.answerAndAdvance(q.id, q.options.last().id) }
+            assertEquals(1, vm.ui.value.session.index); assertEquals(q.options.last().id, vm.ui.value.session.answers.first().optionId)
+            withContext(Dispatchers.Main) { repeat(4) { vm.answerAndAdvance(vm.ui.value.session.questions[vm.ui.value.session.index].id, null) } }
+            assertEquals(Stage.READY, vm.ui.value.session.stage)
+        } finally { withContext(Dispatchers.Main) { store.clear() } }
+    }
     @Test fun aiExtractionRequiresConfirmationBeforeQuestionGeneration() = runBlocking {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as CoinApplication
         app.repository.clear()
