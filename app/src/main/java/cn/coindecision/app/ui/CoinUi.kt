@@ -55,6 +55,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cn.coindecision.app.BuildConfig
 import cn.coindecision.app.R
+import cn.coindecision.app.ai.validatedBaseUrl
+import cn.coindecision.app.ai.chooseAvailableModel
 import cn.coindecision.app.data.*
 import cn.coindecision.app.domain.*
 import kotlinx.coroutines.launch
@@ -461,19 +463,48 @@ private fun time(value: Long) = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHIN
     var key by remember { mutableStateOf("") }
     var saveConfirm by remember { mutableStateOf(false) }
     var testConfirm by remember { mutableStateOf(false) }
+    var modelsConfirm by remember { mutableStateOf(false) }
+    var chooseModel by remember { mutableStateOf(false) }
+    var manualModel by rememberSaveable { mutableStateOf(false) }
+    val models = if (runCatching { validatedBaseUrl(base).toString() }.getOrNull() == state.modelTarget) state.availableModels else emptyList()
+    LaunchedEffect(models) {
+        if (models.isNotEmpty()) {
+            model = chooseAvailableModel(model, models)
+            if (model.isBlank()) chooseModel = true
+        }
+    }
     Panel {
         Text("题目来源", fontWeight = FontWeight.Bold)
         SettingSwitch("联网 AI 出题", online) { online = it }
         Text(if (online) "每次把事项和两种选择交给大模型，生成五道相关问题。需要联网和可用的 API Key。" else "已主动选择离线通用模板：题目固定，不会由大模型针对事项生成。", style = MaterialTheme.typography.bodySmall)
     }
-    OutlinedTextField(base, { base = it.take(300) }, label = { Text("服务地址（Base URL，仅 HTTPS）") },
+    OutlinedTextField(base, {
+        if (it != base) {
+            base = it.take(300); vm.clearModelList()
+            model = if (runCatching { validatedBaseUrl(base).host == "api.deepseek.com" }.getOrDefault(false)) "deepseek-flash" else ""
+        }
+    }, label = { Text("服务地址（Base URL，仅 HTTPS）") },
         supportingText = { Text("大模型服务商的接口地址。默认是 DeepSeek，可替换为支持 Chat Completions 和 JSON 输出的兼容接口；不要填普通聊天网页。") }, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(model, { model = it.take(100) }, label = { Text("模型 ID（接口调用名称）") },
-        supportingText = { Text("指定调用哪个模型，必须填写服务商提供的准确 ID，例如 deepseek-flash；不是软件名称，也不能随意起名。") }, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(key, { key = it.take(4096) }, label = { Text(if (state.hasKey) "新个人 Key（留空保留已有）" else "个人 API Key") },
+    OutlinedTextField(key, { key = it.take(4096); vm.clearModelList() }, label = { Text(if (state.hasKey) "新个人 Key（留空保留已有）" else "个人 API Key") },
         visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true)
     Text(if (state.hasKey) "已为当前地址保存加密 Key" else "当前地址未配置 Key", style = MaterialTheme.typography.bodySmall)
     Text("API Key 是服务商提供的调用密钥，不是账号密码。DeepSeek 只是默认服务商，不是唯一选择；地址、模型 ID、Key 必须来自同一服务。", style = MaterialTheme.typography.bodySmall)
+    Panel {
+        Text(if (model.isBlank()) "尚未选择模型" else "当前模型：$model" + if (model == "deepseek-flash" && runCatching { validatedBaseUrl(base).host == "api.deepseek.com" }.getOrDefault(false)) "（默认，无需填写）" else "", fontWeight = FontWeight.Bold)
+        Text("默认模型已预设。换其他服务可读取可用模型；只有一个时自动选用，有多个时保留已有选择或点选。列表不保证每个模型都支持出题所需的 JSON 接口。", style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(onClick = { modelsConfirm = true }, enabled = !state.testing, modifier = Modifier.fillMaxWidth()) { Text("自动读取可用模型") }
+        if (models.isNotEmpty()) TextButton(onClick = { chooseModel = true }) { Text("从 ${models.size} 个模型中选择") }
+        TextButton(onClick = { manualModel = !manualModel }) { Text(if (manualModel) "收起高级设置" else "高级：手动填写模型 ID") }
+        if (manualModel) OutlinedTextField(model, { model = it.take(100) }, label = { Text("模型 ID（接口调用名称）") },
+            supportingText = { Text("仅在接口不提供模型列表或需自定义模型时填写服务商给出的准确名称。") }, modifier = Modifier.fillMaxWidth())
+    }
+    if (modelsConfirm) ConfirmDialog("读取可用模型？", "使用 API Key 向 $base 读取模型列表。不发送事项、回答或历史，不生成题目。新填的 Key 仅用于这次读取，点击保存设置后才加密保存。", { modelsConfirm = false }) {
+        modelsConfirm = false; vm.loadModels(base.trim(), key.trim())
+    }
+    if (chooseModel) AlertDialog(onDismissRequest = { chooseModel = false }, title = { Text("选择用于出题的模型") },
+        text = { LazyColumn(Modifier.heightIn(max = 320.dp)) { items(models) { id ->
+            TextButton(onClick = { model = id; chooseModel = false }, modifier = Modifier.fillMaxWidth()) { Text(id) }
+        } } }, confirmButton = { TextButton(onClick = { chooseModel = false }) { Text("关闭") } })
     SettingSwitch("投币落定时振动", vibration) { vibration = it }
     SettingSwitch("轻柔投币音效", sound) { sound = it }
     Text("音效跟随手机媒体音量。", style = MaterialTheme.typography.bodySmall)
@@ -487,7 +518,7 @@ private fun time(value: Long) = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHIN
     if (testConfirm) ConfirmDialog("运行连接测试？", "只向 ${state.settings.config.baseUrl} 发送简短无隐私的测试内容，会产生少量 API 用量。不会发送事项或历史。", { testConfirm = false }) {
         testConfirm = false; vm.testConnection()
     }
-    if (state.testing) TextButton(onClick = vm::cancelTest) { Text("取消连接测试") }
+    if (state.testing) TextButton(onClick = vm::cancelTest) { Text("取消联网请求") }
     TextButton(onClick = vm::deleteKey) { Text("删除已保存的个人 Key") }
     UpdateSection(vm, state.settings.githubRepository)
     Panel {

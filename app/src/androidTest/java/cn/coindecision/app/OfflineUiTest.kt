@@ -24,7 +24,7 @@ class OfflineUiTest {
         override fun before() { runBlocking {
             val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as CoinApplication
             app.repository.clear()
-            app.settings.save(app.settings.flow.first().copy(online = false))
+            app.settings.save(app.settings.flow.first().copy(online = false, config = cn.coindecision.app.domain.AiConfig()))
         } }
     }).around(rule)
     @Test fun updateSettingsRejectInvalidRepositoryAndKeepLocalEntry() {
@@ -61,12 +61,15 @@ class OfflineUiTest {
         rule.waitUntil(10000) { rule.onAllNodesWithText("你在犹豫什么？").fetchSemanticsNodes().isNotEmpty() }
         rule.onAllNodes(hasSetTextAction()).assertCountEquals(1)
         rule.onNode(hasSetTextAction()).performTextReplacement("这周末要不要去露营？")
+        rule.waitUntil(5000) { rule.onAllNodes(hasSetTextAction() and hasText("这周末要不要去露营？")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithText("确认两面含义").performScrollTo().performClick()
         rule.onNodeWithText("这周末去露营").assertExists()
         rule.onNodeWithText("这周末不去露营").assertExists()
         rule.onNodeWithText("返回编辑").performScrollTo().performClick()
         rule.onNode(hasSetTextAction() and hasText("你在犹豫什么？")).performScrollTo().performTextReplacement("买房还是投资？")
+        rule.waitUntil(5000) { rule.onAllNodes(hasSetTextAction() and hasText("买房还是投资？")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithText("确认两面含义").performScrollTo().performClick()
+        rule.waitUntil(5000) { rule.onAllNodesWithText("先确认，你的两种选择").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithText("买房").assertExists()
         rule.onNodeWithText("投资").assertExists()
         rule.onNodeWithText("这周末去露营").assertDoesNotExist()
@@ -80,7 +83,7 @@ class OfflineUiTest {
         rule.onNodeWithText("确认两面含义").performScrollTo().performClick()
         rule.onNodeWithText("我确认 A/B 是不同、互斥的安排，文字准确表达我的意思。").performScrollTo().performClick()
         rule.onNodeWithText("配置 AI 接口，生成相关问题").performScrollTo().performClick()
-        rule.onNodeWithText("模型 ID（接口调用名称）").performScrollTo().assertExists()
+        rule.onNodeWithText("当前模型：deepseek-flash（默认，无需填写）").performScrollTo().assertExists()
         rule.onNodeWithText("1 / 5").assertDoesNotExist()
     }
     @Test fun offlineEndToEndAndHistoryDeletion() {
@@ -118,6 +121,17 @@ class OfflineUiTest {
         rule.onNodeWithText("删除此记录").performScrollTo().performClick()
         rule.onNodeWithText("确认").performClick()
         rule.waitUntil(5000) { rule.onAllNodesWithText("0 枚硬币 · 查看记录不会重新投币").fetchSemanticsNodes().isNotEmpty() }
+    }
+    @Test fun defaultModelIsPresetAndManualIdIsOptional() {
+        rule.waitUntil(10000) { rule.onAllNodesWithText("试试示例：周末露营").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("设置").performClick()
+        rule.onNodeWithText("当前模型：deepseek-flash（默认，无需填写）").performScrollTo().assertExists()
+        rule.onNodeWithText("模型 ID（接口调用名称）").assertDoesNotExist()
+        rule.onNodeWithText("自动读取可用模型").assertExists()
+        rule.onNodeWithText("高级：手动填写模型 ID").performScrollTo().performClick()
+        rule.onNodeWithText("模型 ID（接口调用名称）").performScrollTo().assertExists()
+        rule.onNodeWithText("收起高级设置").performScrollTo().performClick()
+        rule.onNodeWithText("模型 ID（接口调用名称）").assertDoesNotExist()
     }
     @Test fun updatedReadyScreenHasNeutralCoinAndCompactEditButton() {
         rule.waitUntil(10000) { rule.onAllNodesWithText("试试示例：周末露营").fetchSemanticsNodes().isNotEmpty() }

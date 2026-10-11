@@ -16,7 +16,8 @@ data class UiState(
     val settings: AppSettings = AppSettings(), val hasKey: Boolean = false,
     val result: TossSnapshot? = null, val detail: TossSnapshot? = null,
     val history: List<TossSnapshot> = emptyList(), val notice: String = "", val tossing: Boolean = false,
-    val testing: Boolean = false, val extracting: Boolean = false
+    val testing: Boolean = false, val extracting: Boolean = false,
+    val availableModels: List<String> = emptyList(), val modelTarget: String = ""
 )
 class CoinViewModel(private val app: CoinApplication, private val testAiOverride: DecisionAiService? = null) : ViewModel() {
     private val _ui = MutableStateFlow(UiState())
@@ -208,7 +209,7 @@ class CoinViewModel(private val app: CoinApplication, private val testAiOverride
     fun feedback(text: String) { val id = _ui.value.result?.tossId ?: return; viewModelScope.launch {
         try { repo.feedback(id, text); _ui.update { it.copy(result = it.result?.copy(feedback = text)) } } catch (_: Exception) { notice("反馈保存失败") }
     } }
-    fun saveSettings(value: AppSettings, key: String) { viewModelScope.launch {
+    fun saveSettings(value: AppSettings, key: String) { clearModelList(); viewModelScope.launch {
         try {
             val base = validatedBaseUrl(value.config.baseUrl).toString().trimEnd('/')
             require(value.config.model.isNotBlank() && value.config.model.length <= 100) { "请输入有效模型 ID" }
@@ -222,7 +223,26 @@ class CoinViewModel(private val app: CoinApplication, private val testAiOverride
             _ui.update { it.copy(hasKey = hasKey, notice = "设置已保存" + if (normalized.online && !hasKey) "，个人 Key 尚未配置" else "") }
         } catch (e: Exception) { notice(e.message?.take(160) ?: "设置保存失败") }
     } }
-    fun deleteKey() { viewModelScope.launch { try { withContext(Dispatchers.IO) { app.vault.delete() }; _ui.update { it.copy(hasKey = false, notice = "个人 Key 已删除") } } catch (_: Exception) { notice("删除 Key 失败") } } }
+    fun deleteKey() { clearModelList(); viewModelScope.launch { try { withContext(Dispatchers.IO) { app.vault.delete() }; _ui.update { it.copy(hasKey = false, notice = "个人 Key 已删除") } } catch (_: Exception) { notice("删除 Key 失败") } } }
+    fun clearModelList() {
+        testJob?.cancel()
+        _ui.update { it.copy(availableModels = emptyList(), modelTarget = "") }
+    }
+    fun loadModels(baseUrl: String, draftKey: String) {
+        if (_ui.value.testing) return
+        _ui.update { it.copy(testing = true, availableModels = emptyList(), modelTarget = "", notice = "正在读取可用模型…") }
+        testJob = viewModelScope.launch {
+            try {
+                val base = validatedBaseUrl(baseUrl).toString()
+                val key = draftKey.ifBlank { withContext(Dispatchers.IO) { app.vault.read(base) } }
+                val models = DeepSeekDecisionAiService(AiConfig(base, ""), key, app.systemPrompt).listModels()
+                ensureActive()
+                _ui.update { it.copy(availableModels = models, modelTarget = base, notice = "已读取 ${models.size} 个模型") }
+            } catch (cancel: CancellationException) { throw cancel }
+            catch (e: Exception) { notice((e as? AiFailure)?.userMessage ?: "读取模型失败，请检查服务地址或手动填写") }
+            finally { _ui.update { it.copy(testing = false) } }
+        }
+    }
     fun testConnection() {
         if (_ui.value.testing) return
         _ui.update { it.copy(testing = true, notice = "正在测试已保存的配置…") }

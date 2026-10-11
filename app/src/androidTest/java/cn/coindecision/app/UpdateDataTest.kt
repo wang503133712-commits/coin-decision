@@ -5,6 +5,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import cn.coindecision.app.ai.OfflineDecisionAiService
 import cn.coindecision.app.domain.*
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.encodeToString
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
@@ -25,6 +26,7 @@ class UpdateDataTest {
         app.repository.save(session)
         val snapshot = app.repository.toss(session)
         app.vault.save("https://api.deepseek.com", "upgrade-fake-not-a-real-key")
+        app.settings.save(app.settings.flow.first().copy(config = AiConfig(model = "upgrade-custom-model")))
         File(app.filesDir, "update-expected.json").writeText(codec.encodeToString(snapshot))
         assertEquals(Stage.RESULT, app.repository.load().stage)
     }
@@ -36,6 +38,7 @@ class UpdateDataTest {
         assertEquals(expected.tossId, app.repository.load().activeTossId)
         assertEquals(Stage.RESULT, app.repository.load().stage)
         assertEquals("upgrade-fake-not-a-real-key", app.vault.read("https://api.deepseek.com"))
+        assertEquals(AiConfig(model = "upgrade-custom-model"), app.settings.flow.first().config)
         app.vault.delete()
     }
 }
