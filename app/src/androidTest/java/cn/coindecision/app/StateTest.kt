@@ -15,6 +15,62 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class StateTest {
+    @Test fun aiExtractionRequiresConfirmationBeforeQuestionGeneration() = runBlocking {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as CoinApplication
+        app.repository.clear()
+        var generated = false
+        val fake = object : DecisionAiService {
+            override suspend fun extractOptions(matter: String): DecisionOptions {
+                assertEquals("想聚餐又想在家休息", matter)
+                return DecisionOptions("参加聚餐", "在家休息")
+            }
+            override suspend fun generate(request: DecisionRequest): AiResponse {
+                generated = true
+                return OfflineDecisionAiService().generate(request)
+            }
+        }
+        val vm = withContext(Dispatchers.Main) { CoinViewModel(app, fake) }
+        val store = ViewModelStore().apply { put("test", vm) }
+        try {
+            withTimeout(10000) { vm.ui.first { !it.loading } }
+            withContext(Dispatchers.Main) { vm.edit("想聚餐又想在家休息", "", ""); vm.extractOptions() }
+            val s = withTimeout(10000) { vm.ui.first { it.session.stage == Stage.CONFIRM && !it.extracting }.session }
+            assertEquals("参加聚餐", s.optionA); assertEquals("在家休息", s.optionB)
+            assertTrue(s.questions.isEmpty()); assertFalse(generated)
+            withContext(Dispatchers.Main) { vm.editMatter(s.matter) }
+            assertEquals(Stage.CONFIRM, vm.ui.value.session.stage)
+            assertEquals(s.optionA, vm.ui.value.session.optionA)
+            withContext(Dispatchers.Main) { vm.back(); vm.editMatter("新的复杂事项") }
+            assertTrue(vm.ui.value.session.optionA.isBlank()); assertTrue(vm.ui.value.session.optionB.isBlank())
+        } finally { withContext(Dispatchers.Main) { store.clear() } }
+    }
+    @Test fun cancelledAiExtractionCannotOverwriteNewMatterOrChoices() = runBlocking {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as CoinApplication
+        app.repository.clear()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val fake = object : DecisionAiService {
+            override suspend fun extractOptions(matter: String): DecisionOptions {
+                entered.complete(Unit)
+                withContext(NonCancellable) { release.await() }
+                return DecisionOptions("参加聚餐", "在家休息")
+            }
+            override suspend fun generate(request: DecisionRequest) = OfflineDecisionAiService().generate(request)
+        }
+        val vm = withContext(Dispatchers.Main) { CoinViewModel(app, fake) }
+        val store = ViewModelStore().apply { put("test", vm) }
+        try {
+            withTimeout(10000) { vm.ui.first { !it.loading } }
+            withContext(Dispatchers.Main) { vm.edit("复杂问题", "", ""); vm.extractOptions() }
+            withTimeout(10000) { entered.await() }
+            withContext(Dispatchers.Main) { vm.edit("新问题", "喝茶", "喝咖啡") }
+            release.complete(Unit); delay(200)
+            assertEquals("新问题", vm.ui.value.session.matter)
+            assertEquals("喝茶", vm.ui.value.session.optionA)
+            assertEquals(Stage.EDIT, vm.ui.value.session.stage)
+            assertFalse(vm.ui.value.extracting)
+        } finally { release.complete(Unit); withContext(Dispatchers.Main) { store.clear() } }
+    }
     @Test fun staleCancelledRequestCannotOverwriteEditedMatter() = runBlocking {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as CoinApplication
         app.repository.clear()

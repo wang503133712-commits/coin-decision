@@ -16,7 +16,7 @@ data class UiState(
     val settings: AppSettings = AppSettings(), val hasKey: Boolean = false,
     val result: TossSnapshot? = null, val detail: TossSnapshot? = null,
     val history: List<TossSnapshot> = emptyList(), val notice: String = "", val tossing: Boolean = false,
-    val testing: Boolean = false
+    val testing: Boolean = false, val extracting: Boolean = false
 )
 class CoinViewModel(private val app: CoinApplication, private val testAiOverride: DecisionAiService? = null) : ViewModel() {
     private val _ui = MutableStateFlow(UiState())
@@ -60,15 +60,55 @@ class CoinViewModel(private val app: CoinApplication, private val testAiOverride
         if (_ui.value.tossing) return
         generation?.cancel(); epoch++
         change { old -> Session(matter = matter.take(500), optionA = a.take(120), optionB = b.take(120), revision = old.revision) }
-        _ui.update { it.copy(result = null) }
+        _ui.update { it.copy(result = null, extracting = false) }
+    }
+    fun editMatter(matter: String) {
+        if (matter == _ui.value.session.matter) return
+        // 事项变更后重提取，不能沿用模型或旧草稿中另一件事的两面。
+        edit(matter, "", "")
     }
     fun confirm() {
         try {
-            val s = _ui.value.session
+            var s = _ui.value.session
+            if (s.optionA.isBlank() && s.optionB.isBlank()) {
+                val options = DecisionOptions.infer(s.matter)
+                    ?: throw IllegalArgumentException("还不能确定两种选择。请写成“要不要…”或“A 还是 B”，也可以展开手动编辑。")
+                s = s.copy(optionA = options.a, optionB = options.b)
+            }
             Contract.request(s.request())
-            change { it.copy(stage = if (SafetyGate.blocked(s.request())) Stage.BLOCKED else Stage.CONFIRM,
+            change { it.copy(optionA = s.optionA, optionB = s.optionB, stage = if (SafetyGate.blocked(s.request())) Stage.BLOCKED else Stage.CONFIRM,
                 message = if (SafetyGate.blocked(s.request())) SafetyGate.message else "") }
         } catch (e: IllegalArgumentException) { notice(e.message ?: "请填写事项和两面含义") }
+    }
+    fun extractOptions() {
+        val original = _ui.value.session
+        if (_ui.value.loading || _ui.value.extracting || original.stage != Stage.EDIT) return
+        if (SafetyGate.blocked(original.request())) { change { it.copy(stage = Stage.BLOCKED, message = SafetyGate.message) }; return }
+        generation?.cancel()
+        val token = ++epoch
+        val config = _ui.value.settings.config
+        _ui.update { it.copy(extracting = true, notice = "") }
+        generation = viewModelScope.launch {
+            try {
+                val options = (testAiOverride ?: deepSeek(config)).extractOptions(original.matter)
+                ensureActive()
+                if (token != epoch) return@launch
+                change { it.copy(optionA = options.a, optionB = options.b) }
+                confirm()
+            } catch (cancel: CancellationException) { throw cancel }
+            catch (e: Exception) {
+                if (token == epoch) {
+                    val failure = e as? AiFailure
+                    if (failure?.blocked == true) change { it.copy(stage = Stage.BLOCKED, message = failure.userMessage) }
+                    else notice(failure?.userMessage ?: "提取失败，请重试或手动编辑两种选择")
+                }
+            }
+            finally { if (token == epoch) _ui.update { it.copy(extracting = false) } }
+        }
+    }
+    fun cancelExtraction() {
+        generation?.cancel(); epoch++
+        _ui.update { it.copy(extracting = false, notice = "已取消提取") }
     }
     fun generate(offline: Boolean = false) {
         if (_ui.value.loading || _ui.value.session.stage == Stage.BLOCKED || _ui.value.tossing) return
@@ -139,13 +179,14 @@ class CoinViewModel(private val app: CoinApplication, private val testAiOverride
         if (_ui.value.tossing) return
         generation?.cancel(); epoch++
         change { Session(revision = it.revision) }
-        _ui.update { it.copy(page = Page.MAIN, result = null, detail = null) }
+        _ui.update { it.copy(page = Page.MAIN, result = null, detail = null, extracting = false) }
     }
     fun page(page: Page) { if (!_ui.value.tossing) _ui.update { it.copy(page = page, notice = "") } }
     fun detail(record: TossSnapshot) { _ui.update { it.copy(page = Page.DETAIL, detail = record, notice = "") } }
     fun back() {
         val state = _ui.value
         if (state.tossing || state.session.stage == Stage.ANIMATING) return
+        if (state.page == Page.MAIN && state.extracting) { cancelExtraction(); return }
         if (state.page == Page.DETAIL) { page(Page.HISTORY); return }
         if (state.page != Page.MAIN) { page(Page.MAIN); return }
         when (state.session.stage) {

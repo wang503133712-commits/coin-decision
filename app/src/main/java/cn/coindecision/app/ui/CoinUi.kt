@@ -83,7 +83,7 @@ private val Champagne = Color(0xFFE9C98B)
     val audio = remember { CoinAudio() }
     DisposableEffect(Unit) { onDispose { audio.release() } }
     MaterialTheme(colorScheme = scheme) {
-        val canBack = state.page != Page.MAIN || state.session.stage != Stage.EDIT
+        val canBack = state.page != Page.MAIN || state.session.stage != Stage.EDIT || state.extracting
         BackHandler(enabled = canBack) { vm.back() }
         Surface(Modifier.fillMaxSize(), color = scheme.background) {
             Column(Modifier.safeDrawingPadding().imePadding().fillMaxSize()) {
@@ -141,7 +141,7 @@ private val Champagne = Color(0xFFE9C98B)
 }
 @Composable private fun SourceLabel(source: Source) {
     Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(50)) {
-        Text(if (source == Source.OFFLINE) "离线通用题目" else "DeepSeek 生成题目", Modifier.padding(horizontal = 12.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+        Text(if (source == Source.OFFLINE) "离线通用题目" else "AI 生成相关题目", Modifier.padding(horizontal = 12.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
     }
 }
 @Composable private fun Faces(session: Session) {
@@ -194,7 +194,10 @@ private val Champagne = Color(0xFFE9C98B)
 }
 @Composable private fun GenerateButton(label: String, state: UiState, vm: CoinViewModel, enabled: Boolean = true) {
     var consent by remember { mutableStateOf(false) }
-    Primary(label, enabled) { if (state.settings.online) consent = true else vm.generate() }
+    Primary(label, enabled) {
+        if (state.settings.online && !state.hasKey) vm.page(Page.SETTINGS)
+        else if (state.settings.online) consent = true else vm.generate(offline = true)
+    }
     if (consent) AlertDialog(onDismissRequest = { consent = false }, title = { Text("确认联网出题") },
         text = { Text("本次事项和确认的 A/B 将发送至 ${state.settings.config.baseUrl}，会产生 API 用量。回答和历史留在本机。仅在你同意后发送。") },
         confirmButton = { TextButton(onClick = { consent = false; vm.generate() }) { Text("同意并出题") } },
@@ -204,20 +207,31 @@ private val Champagne = Color(0xFFE9C98B)
     val s = state.session
     when (s.stage) {
         Stage.EDIT -> {
+            var manual by rememberSaveable { mutableStateOf(s.optionA.isNotBlank() || s.optionB.isNotBlank()) }
+            var extractConsent by remember { mutableStateOf(false) }
             Hero()
             Panel {
                 Text("01  /  写下这次犹豫", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedTextField(s.matter, { vm.edit(it, s.optionA, s.optionB) }, label = { Text("你在犹豫什么？") },
-                    shape = RoundedCornerShape(16.dp), supportingText = { Text("日常的是否选择 · ${s.matter.length}/500") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-                TextButton(onClick = { vm.edit("这周末要不要去露营？", "这周末去露营", "这周末不去露营，保留原有安排") }, contentPadding = PaddingValues(horizontal = 0.dp)) { Text("试试示例：周末露营") }
+                OutlinedTextField(s.matter, vm::editMatter, label = { Text("你在犹豫什么？") },
+                    shape = RoundedCornerShape(16.dp), supportingText = { Text("自动提取两种选择，复杂表述交给 AI · ${s.matter.length}/500") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                TextButton(onClick = { manual = false; vm.edit("这周末要不要去露营？", "", "") }, contentPadding = PaddingValues(horizontal = 0.dp)) { Text("试试示例：周末露营") }
             }
-            Panel {
-                Text("02  /  定义硬币的两面", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { manual = !manual }) { Text(if (manual) "收起手动编辑" else "手动编辑两种选择") }
+            if (manual) Panel {
+                Text("两种选择，也可以自己调整", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(s.optionA, { vm.edit(s.matter, it, s.optionB) }, label = { Text("正面 A：执行什么行动") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(s.optionB, { vm.edit(s.matter, s.optionA, it) }, label = { Text("反面 B：不做、暂缓或什么现状") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
                 Text("把两面写成具体、互斥的行为。否定句也请自己核对。每面最多 120 字。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Primary("确认两面含义", s.matter.isNotBlank() && s.optionA.isNotBlank() && s.optionB.isNotBlank(), vm::confirm)
+            Primary(if (state.extracting) "正在提取两种选择…" else "确认两面含义", s.matter.isNotBlank() && !state.extracting) {
+                if (s.optionA.isBlank() && s.optionB.isBlank() && DecisionOptions.infer(s.matter) == null && state.settings.online) {
+                    if (state.hasKey) extractConsent = true else vm.page(Page.SETTINGS)
+                } else vm.confirm()
+            }
+            if (state.extracting) TextButton(onClick = vm::cancelExtraction) { Text("取消提取") }
+            if (extractConsent) ConfirmDialog("让 AI 提取两种选择？", "本次问题将发送至 ${state.settings.config.baseUrl}，用于提取两种选择，会产生 API 用量；之后由你核对，不会直接投币。", { extractConsent = false }) {
+                extractConsent = false; vm.extractOptions()
+            }
         }
         Stage.CONFIRM -> {
             Heading("先确认，你的两种选择", s.matter)
@@ -226,7 +240,7 @@ private val Champagne = Color(0xFFE9C98B)
             Row(Modifier.fillMaxWidth().toggleableCompat(checked) { checked = it }, verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked, null); Text("我确认 A/B 是不同、互斥的安排，文字准确表达我的意思。", Modifier.weight(1f))
             }
-            GenerateButton("开始了解自己", state, vm, checked)
+            GenerateButton(if (state.settings.online && !state.hasKey) "配置 AI 接口，生成相关问题" else if (state.settings.online) "让 AI 生成相关问题" else "开始了解自己", state, vm, checked)
             TextButton(onClick = vm::back) { Text("返回编辑") }
         }
         Stage.GENERATING -> {
@@ -438,7 +452,7 @@ private fun time(value: Long) = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHIN
         confirmButton = { TextButton(onClick = confirm) { Text("确认") } }, dismissButton = { TextButton(onClick = dismiss) { Text("取消") } })
 }
 @Composable private fun SettingsPage(state: UiState, vm: CoinViewModel) {
-    Heading("设置", "默认离线。把隐私和选择权留在你手中。")
+    Heading("设置", "配置大模型，让题目贴合这次犹豫。")
     var online by rememberSaveable(state.settings.online) { mutableStateOf(state.settings.online) }
     var base by rememberSaveable(state.settings.config.baseUrl) { mutableStateOf(state.settings.config.baseUrl) }
     var model by rememberSaveable(state.settings.config.model) { mutableStateOf(state.settings.config.model) }
@@ -449,14 +463,17 @@ private fun time(value: Long) = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHIN
     var testConfirm by remember { mutableStateOf(false) }
     Panel {
         Text("题目来源", fontWeight = FontWeight.Bold)
-        SettingSwitch(if (online) "个人 DeepSeek 模式" else "离线通用题目", online) { online = it }
-        Text("不填 Key 也可以完整投币。离线题目是通用自省模板。", style = MaterialTheme.typography.bodySmall)
+        SettingSwitch("联网 AI 出题", online) { online = it }
+        Text(if (online) "每次把事项和两种选择交给大模型，生成五道相关问题。需要联网和可用的 API Key。" else "已主动选择离线通用模板：题目固定，不会由大模型针对事项生成。", style = MaterialTheme.typography.bodySmall)
     }
-    OutlinedTextField(base, { base = it.take(300) }, label = { Text("Base URL（仅 HTTPS）") }, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(model, { model = it.take(100) }, label = { Text("Model API ID") }, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(base, { base = it.take(300) }, label = { Text("服务地址（Base URL，仅 HTTPS）") },
+        supportingText = { Text("大模型服务商的接口地址。默认是 DeepSeek，可替换为支持 Chat Completions 和 JSON 输出的兼容接口；不要填普通聊天网页。") }, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(model, { model = it.take(100) }, label = { Text("模型 ID（接口调用名称）") },
+        supportingText = { Text("指定调用哪个模型，必须填写服务商提供的准确 ID，例如 deepseek-flash；不是软件名称，也不能随意起名。") }, modifier = Modifier.fillMaxWidth())
     OutlinedTextField(key, { key = it.take(4096) }, label = { Text(if (state.hasKey) "新个人 Key（留空保留已有）" else "个人 API Key") },
         visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true)
     Text(if (state.hasKey) "已为当前地址保存加密 Key" else "当前地址未配置 Key", style = MaterialTheme.typography.bodySmall)
+    Text("API Key 是服务商提供的调用密钥，不是账号密码。DeepSeek 只是默认服务商，不是唯一选择；地址、模型 ID、Key 必须来自同一服务。", style = MaterialTheme.typography.bodySmall)
     SettingSwitch("投币落定时振动", vibration) { vibration = it }
     SettingSwitch("轻柔投币音效", sound) { sound = it }
     Text("音效跟随手机媒体音量。", style = MaterialTheme.typography.bodySmall)

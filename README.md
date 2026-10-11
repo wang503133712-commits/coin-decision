@@ -1,8 +1,8 @@
-# 偏心硬币 1.3.1
+# 偏心硬币 1.4.0
 
-中文安卓日常决策工具。默认离线，AI 只出题、本地规则算倾向、本地 SecureRandom 投币。应用名集中在 `app/src/main/res/values/strings.xml`。
+中文安卓日常决策工具。默认联网 AI 根据事项出题，AI 只出题、本地规则算倾向、本地 SecureRandom 投币。应用名集中在 `app/src/main/res/values/strings.xml`。
 
-新版为 `偏心硬币-安卓-1.3.1.apk`，Release 构建、关闭调试，沿用原签名，versionCode 为 7。支持 GitHub Releases 在线检查、下载与校验安装。保留媒体音效、上下翻转、牛奶白/金色界面、居中问号与修改按钮、完整 API 接口。可直接覆盖旧版，不要先卸载。
+新版为 `偏心硬币-安卓-1.4.0.apk`，Release 构建、关闭调试，沿用原签名，versionCode 为 8。支持 GitHub Releases 在线检查、下载与校验安装。保留媒体音效、上下翻转、牛奶白/金色界面、居中问号与修改按钮、完整 API 接口。可直接覆盖旧版，不要先卸载。
 
 从 [GitHub Releases 下载安卓安装包](https://github.com/wang503133712-commits/coin-decision/releases/latest)。App 默认预填官方仓库 `wang503133712-commits/coin-decision`，在“设置 → 版本与更新”点击“保存并检查更新”即可；自行设置过其他仓库的用户配置保留。使用与发布见 [GITHUB_UPDATES.md](GITHUB_UPDATES.md)。
 
@@ -31,25 +31,25 @@ cd 'C:\Users\Administrator\Documents\Codex\2026-10-10\files-pasted-by-the-user-a
 & 'F:\ComfyAutomation\android-toolchain\sdk\platform-tools\adb.exe' -s <设备序号> install -r .\app\build\outputs\apk\release\app-release.apk
 ```
 
-也可把 APK 发到安卓手机，点开后按系统提示安装。旧版“设置 → 版本与更新 → 选择 APK 更新包”也可导入本次 1.3.1 包。新版该入口名为“选择本地 APK 更新包”。仍使用本项目原有固定签名，未上架应用商店。
+也可把 APK 发到安卓手机，点开后按系统提示安装。旧版“设置 → 版本与更新 → 选择 APK 更新包”也可导入本次 1.4.0 包。新版该入口名为“选择本地 APK 更新包”。仍使用本项目原有固定签名，未上架应用商店。
 
-## 不填 Key 的使用方式
+## 写下问题并让 AI 出题
 
-打开 App，填写日常事项和正反面的具体行为，确认两种安排不同且互斥。否定句请自行核对，例如“要不要不去聚餐”必须明确 A 是去还是不去。
+打开 App，只需填写问题，例如“这周末要不要去露营”或“喝茶还是咖啡”。点击“确认两面含义”，本机提取常见二选一句式；复杂表述经你确认后使用已配置的大模型提取，两种选择展示供核对。模型仍无法明确、多项或过长问题需补充，可展开“手动编辑两种选择”。修改问题时清空上次两种选择，重新提取，防止沿用另一事项的选项。
 
-点击“开始了解自己”，完成五题或主动跳过。点击“投出这枚硬币”，在结果页查看具体选项与可展开说明。题目来源明确标注“离线通用题目”；没有网络或 Key 时仍可投币、保存、查看、删除历史。
+首次及升级默认优先联网 AI 出题。先在设置保存服务地址、模型 ID 和个人 API Key，核对两种选择后点击“让 AI 生成相关问题”，同意发送本次事项和 A/B 后生成五道相关题目。没有 Key 会引导配置，失败不会自动替换为固定题目。完成五题或主动跳过后投币，结果与历史保留在本机。只有在设置明确关闭“联网 AI 出题”或错误页主动切换，才使用固定的离线通用模板。
 
 界面采用牛奶白底、珍珠白卡片与香槟金硬币，硬币有可读 A/B 与正反标签。流程是一屏一题，支持返回修改回答；编辑事项或 A/B 会作废旧题组和答案。系统字体放大、小屏可以滚动，夜间跟随系统使用暖深色背景、保留金色硬币，历史按需渲染。尊重系统关闭动画设置，音效与振动可在设置中分别关闭。
 
 投币配有本地原创短音效：轻柔抛起、清脆落定，跟随媒体音量，无网络或额外音频素材；媒体音量为零或设置关闭音效时不播放。应用内音量键调整媒体音量，不强制修改音量。动画约 1.6 秒，绕水平轴上下翻转，按钮按压轻缩放，落定轻振动。音效最终响度和振动手感仍需在实体手机上确认。
 
-## DeepSeek 个人直连
+## 大模型 API（默认 DeepSeek）
 
-顶部“设置”中启用“个人 DeepSeek 模式”，填写 Base URL、Model API ID 和自己的 API Key，点击“保存设置”确认目标。
+顶部设置解释了三个字段：服务地址是大模型 HTTPS 接口地址；模型 ID 是该服务商用于接口调用的准确名称，不能随意起名；API Key 是调用密钥，不是账号密码。默认 DeepSeek，也可配置支持 Chat Completions 和 JSON 输出的兼容服务。地址、模型和 Key 必须匹配，保存后可测试连接。
 
 - 默认 Base URL：`https://api.deepseek.com`，路径：`POST /chat/completions`。
 - 默认 model：`deepseek-flash`，不自动换成其他付费模型。
-- `stream=false`、`response_format={"type":"json_object"}`、`thinking={"type":"disabled"}`、`max_tokens=4096`。
+- `stream=false`、`response_format={"type":"json_object"}`、`max_tokens=4096`；仅 api.deepseek.com 请求附带 `thinking={"type":"disabled"}`，其他兼容接口省略此专属参数。
 - Key 为空返回 NotConfigured，不发送请求。首次（以及每次新出题）发送前明确确认本次事项和 A/B 将发送至配置的地址并可能产生 API 用量。
 - 点击“测试已保存配置的连接”，确认少量 API 用量后才执行。测试只发送简短测试内容；取消可中断请求。
 - “删除已保存的个人 Key”立即删除密文与 Keystore 加密密钥。
@@ -82,15 +82,15 @@ Room 保存一份草稿、冻结题组与每枚硬币的完整快照（事项、
 
 ## 版本管理与 APK 更新
 
-`version.properties` 是唯一 App 版号来源，当前 versionName=1.3.1、versionCode=7。schemaVersion=1、题组版本=2、算法版本=1、Room 数据库版本=1 分别管理。Git 记录源码、提示词、测试、Room schema、变更日志；不记录本地签名、密钥、缓存、构建文件。此次交付建立 `v1.3.1` 标签，保留之前版本用于升级回归。旧草稿与历史使用原题目快照，不强制改写。
+`version.properties` 是唯一 App 版号来源，当前 versionName=1.4.0、versionCode=8。schemaVersion=1、题组版本=3、算法版本=1、Room 数据库版本=1 分别管理。Git 记录源码、提示词、测试、Room schema、变更日志；不记录本地签名、密钥、缓存、构建文件。此次交付建立 `v1.4.0` 标签，保留之前版本用于升级回归。旧草稿与历史使用原题目快照，不强制改写。
 
-工程目录保留本地 Git 仓库；交付另有源码 ZIP 与 `coin-decision-1.3.1.bundle`，后者可用 `git clone <bundle路径> <新工程目录>` 恢复提交和标签。私密签名需另行恢复。
+工程目录保留本地 Git 仓库；交付另有源码 ZIP 与 `coin-decision-1.4.0.bundle`，后者可用 `git clone <bundle路径> <新工程目录>` 恢复提交和标签。私密签名需另行恢复。
 
 在“设置 → 版本与更新”中配置公开 GitHub 仓库，检查、下载新版；也可以“选择本地 APK 更新包”导入安装包。App 会检查 APK 可解析、包名相同、签名证书相同、versionCode 严格更高，然后显示版号并调用安卓系统安装器。系统可能要求允许来自本 App 的安装，返回后点击“继续安装已校验更新”。只在点击时联网，安装需系统确认。系统安装器仍负责实际签名与安装验证。
 
 后续更新开发步骤：
 
-1. 修改 `version.properties`，versionCode 必须递增，例如下次 `versionName=1.3.2, versionCode=8`。
+1. 修改 `version.properties`，versionCode 必须递增，例如下次 `versionName=1.4.1, versionCode=9`。
 2. 固定 applicationId=`cn.coindecision.app`，固定首版签名。不要在 debug 中增加 applicationIdSuffix。
 3. 本机 `.signing/coin-test.jks` 与 `signing.properties` 是本 App 新生成的固定测试签名，已被 Git 忽略。必须私下备份；任何能拿到签名文件的人都可能伪造更新。测试 keystore 密码为标准 `android`，不能将这个签名用于正式公开产品。
 4. `build.ps1` 在固定签名缺失时必须拒绝生成安装包，以免误用其他机器的默认 debug 签名。正式公开发行前应另建保管严格的发行签名；测试签名与正式签名通常不能互相覆盖，需规划迁移。
@@ -109,7 +109,7 @@ Room 保存一份草稿、冻结题组与每枚硬币的完整快照（事项、
 {"schemaVersion":1,"matter":"这周末要不要去露营？","optionA":"去露营","optionB":"不去露营"}
 ```
 
-响应沿用 AiResponse v1。status 为 ok 时返回五题，各维度一次、每题五个立场一次；blocked/needs_clarification 返回 message 与空题组。当前版本化提示词在 `app/src/main/assets/deepseek-system-v2.txt`，保留 v1 以便追溯。第四题按用户要求询问“哪种更为稳妥”，沿用 uncertainty_acceptance 维度 ID，记录用户主观判断，计分方向不变。严格拒绝额外控制字段、重复 ID、缺失枚举、非法长度等；文本只按纯文本渲染。
+响应沿用 AiResponse v1。status 为 ok 时返回五题，各维度一次、每题五个立场一次；blocked/needs_clarification 返回 message 与空题组。当前版本化提示词在 `app/src/main/assets/ai-system-v3.txt`，保留 v1/v2 以便追溯。v3 要求具体相关题干、不照抄固定模板；第四题围绕本次不确定性询问主观稳妥程度，沿用 uncertainty_acceptance 维度 ID，计分方向不变。严格拒绝额外控制字段、重复 ID、缺失枚举、非法长度等；文本只按纯文本渲染。
 
 未来路线 App → 自有服务端 → DeepSeek，开发者 Key 只放服务端，补齐身份校验、限流、用量上限、隐私约定。公共服务端代理仅保留接入边界，本次未开发部署。不得把开发者公共 Key 放入 APK。
 

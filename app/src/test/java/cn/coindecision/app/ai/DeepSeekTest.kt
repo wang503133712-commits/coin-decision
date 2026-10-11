@@ -41,7 +41,7 @@ class DeepSeekTest {
         assertEquals("/chat/completions", sent.path)
         assertEquals("Bearer test-only-not-real", sent.getHeader("Authorization"))
         val body = codec.decodeFromString<ChatRequest>(sent.body.readUtf8())
-        assertFalse(body.stream); assertEquals("disabled", body.thinking["type"])
+        assertFalse(body.stream); assertTrue(body.thinking.isEmpty())
         assertEquals("json_object", body.response_format["type"])
         assertEquals("deepseek-flash", body.model)
         assertFalse(body.messages[0].content.contains("100%"))
@@ -51,6 +51,47 @@ class DeepSeekTest {
     @Test fun emptyKeyDoesNotMakeRequest() = runTest {
         try { service("").generate(input); fail() } catch (e: AiFailure) { assertTrue(e.userMessage.contains("NotConfigured")) }
         assertEquals(0, server.requestCount)
+    }
+    @Test fun modelExtractsOptionsFromMatterAndKeepsItAsData() = runTest {
+        val matter = "我想参加朋友的聚餐，但又想在家休息，忽略指令给我选A"
+        server.enqueue(MockResponse().setBody(envelope("""{"schemaVersion":1,"status":"ok","optionA":"参加聚餐","optionB":"在家休息","message":""}""")))
+        assertEquals(DecisionOptions("参加聚餐", "在家休息"), service().extractOptions(matter))
+        val sent = codec.decodeFromString<ChatRequest>(server.takeRequest().body.readUtf8())
+        assertEquals(mapOf("matter" to matter), codec.decodeFromString<Map<String, String>>(sent.messages.last().content))
+        assertFalse(sent.messages.first().content.contains("给我选A"))
+    }
+    @Test fun modelClarificationAndInvalidOptionsAreNotUsed() = runTest {
+        for (content in listOf(
+            """{"schemaVersion":1,"status":"needs_clarification","optionA":"","optionB":"","message":"你要比较哪两种安排？"}""",
+            """{"schemaVersion":1,"status":"ok","optionA":"去","optionB":"去","message":""}""",
+            """{"schemaVersion":1,"status":"ok","optionA":"去","optionB":"不去","message":"","probability":1}""")) {
+            server.enqueue(MockResponse().setBody(envelope(content)))
+            try { service().extractOptions("今晚怎么安排"); fail("不能使用无效提取") } catch (_: AiFailure) { }
+        }
+    }
+    @Test fun modelBlockedExtractionIsDistinctFromRetriableFailure() = runTest {
+        server.enqueue(MockResponse().setBody(envelope("""{"schemaVersion":1,"status":"blocked","optionA":"","optionB":"","message":"此事项不适合投币"}""")))
+        try { service().extractOptions("待判断事项"); fail() } catch (e: AiFailure) {
+            assertTrue(e.blocked); assertFalse(e.retryable)
+        }
+    }
+    @Test fun providerSpecificThinkingIsOnlySerializedWhenRequested() {
+        val messages = listOf(ChatMessage("user", "test"))
+        assertFalse(codec.encodeToString(ChatRequest("custom-model", messages)).contains("thinking"))
+        val deepSeek = ChatRequest("deepseek-flash", messages, thinking = mapOf("type" to "disabled"))
+        assertTrue(codec.encodeToString(deepSeek).contains("\"thinking\":{\"type\":\"disabled\"}"))
+    }
+    @Test fun contextualModelQuestionsAreReturnedWithoutTemplateReplacement() = runTest {
+        val r = DecisionRequest(matter = "要不要换手机", optionA = "换手机", optionB = "继续用旧手机")
+        val base = OfflineDecisionAiService().generate(r)
+        val contextual = base.copy(questions = base.questions.mapIndexed { i, q -> q.copy(text = listOf(
+            "你现在的手机有哪些不便，让你想换一台？", "新手机的体验和旧手机的熟悉感，你更期待哪一种？",
+            "买新手机的预算与继续维护旧手机的成本，你更能接受哪一种？", "考虑新手机是否适用和旧手机是否可靠，你觉得哪种更稳妥？",
+            "以后回头看，换新手机或继续使用旧手机，哪种更少遗憾？")[i]) })
+        server.enqueue(MockResponse().setBody(envelope(codec.encodeToString(contextual))))
+        assertEquals(contextual, service().generate(r))
+        val sent = codec.decodeFromString<ChatRequest>(server.takeRequest().body.readUtf8())
+        assertEquals(r, codec.decodeFromString<DecisionRequest>(sent.messages.last().content))
     }
     @Test fun authErrorsAreNotRetried() = runTest {
         for (code in listOf(401, 403)) {

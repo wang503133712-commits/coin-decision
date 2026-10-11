@@ -38,6 +38,7 @@ class OfflineUiTest {
     }
     @Test fun longNegatedInputKeepsConfirmedDirections() {
         rule.waitUntil(10000) { rule.onAllNodesWithText("你在犹豫什么？").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("手动编辑两种选择").performScrollTo().performClick()
         val fields = rule.onAllNodes(hasSetTextAction())
         val matter = "我要不要不去聚餐？" + "长文本说明。".repeat(80)
         fields[0].performTextReplacement(matter.take(500))
@@ -55,6 +56,32 @@ class OfflineUiTest {
         fields[0].performScrollTo().performTextReplacement("")
         fields[1].performScrollTo().performTextReplacement("")
         fields[2].performScrollTo().performTextReplacement("")
+    }
+    @Test fun questionAloneExtractsOptionsAndEditsDoNotKeepStaleOptions() {
+        rule.waitUntil(10000) { rule.onAllNodesWithText("你在犹豫什么？").fetchSemanticsNodes().isNotEmpty() }
+        rule.onAllNodes(hasSetTextAction()).assertCountEquals(1)
+        rule.onNode(hasSetTextAction()).performTextReplacement("这周末要不要去露营？")
+        rule.onNodeWithText("确认两面含义").performScrollTo().performClick()
+        rule.onNodeWithText("这周末去露营").assertExists()
+        rule.onNodeWithText("这周末不去露营").assertExists()
+        rule.onNodeWithText("返回编辑").performScrollTo().performClick()
+        rule.onNode(hasSetTextAction() and hasText("你在犹豫什么？")).performScrollTo().performTextReplacement("买房还是投资？")
+        rule.onNodeWithText("确认两面含义").performScrollTo().performClick()
+        rule.onNodeWithText("买房").assertExists()
+        rule.onNodeWithText("投资").assertExists()
+        rule.onNodeWithText("这周末去露营").assertDoesNotExist()
+    }
+    @Test fun aiWithoutKeyOpensSettingsInsteadOfUsingFixedQuestions() = runBlocking {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as CoinApplication
+        app.vault.delete()
+        app.settings.save(app.settings.flow.first().copy(online = true))
+        rule.waitUntil(10000) { rule.onAllNodesWithText("试试示例：周末露营").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("试试示例：周末露营").performScrollTo().performClick()
+        rule.onNodeWithText("确认两面含义").performScrollTo().performClick()
+        rule.onNodeWithText("我确认 A/B 是不同、互斥的安排，文字准确表达我的意思。").performScrollTo().performClick()
+        rule.onNodeWithText("配置 AI 接口，生成相关问题").performScrollTo().performClick()
+        rule.onNodeWithText("模型 ID（接口调用名称）").performScrollTo().assertExists()
+        rule.onNodeWithText("1 / 5").assertDoesNotExist()
     }
     @Test fun offlineEndToEndAndHistoryDeletion() {
         rule.waitUntil(10000) { rule.onAllNodesWithText("试试示例：周末露营").fetchSemanticsNodes().isNotEmpty() }
@@ -126,6 +153,7 @@ class OfflineUiTest {
     }
     @Test fun blockedFlowNeverShowsToss() {
         rule.waitUntil(10000) { rule.onAllNodesWithText("你在犹豫什么？").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("手动编辑两种选择").performScrollTo().performClick()
         val fields = rule.onAllNodes(hasSetTextAction())
         fields[0].performTextReplacement("要不要停药")
         fields[1].performTextReplacement("停药")

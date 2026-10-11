@@ -17,7 +17,7 @@ class RulesTest {
         assertEquals(Lean.STRONG_A, q.options.first().lean)
         assertEquals("明显觉得 B 更稳妥：不去露营", q.options.last().label)
         assertEquals(Lean.STRONG_B, q.options.last().lean)
-        assertEquals(2, QUESTION_VERSION)
+        assertEquals(3, QUESTION_VERSION)
     }
     @Test fun scoresAndSkippedAreDeterministic() = runTest {
         val q = OfflineDecisionAiService().generate(request).questions

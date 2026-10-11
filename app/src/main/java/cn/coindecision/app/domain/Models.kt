@@ -7,7 +7,7 @@ import java.util.UUID
 
 val codec = Json { ignoreUnknownKeys = false; encodeDefaults = true }
 const val ALGORITHM_VERSION = 1
-const val QUESTION_VERSION = 2
+const val QUESTION_VERSION = 3
 
 @Serializable enum class Lean(val score: Double) {
     STRONG_A(1.0), LEAN_A(0.75), NEUTRAL(0.5), LEAN_B(0.25), STRONG_B(0.0)
