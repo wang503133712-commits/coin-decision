@@ -1,8 +1,8 @@
-# 偏心硬币 1.4.2
+# 偏心硬币 1.4.3
 
 中文安卓日常决策工具。默认联网 AI 根据事项出题，AI 只出题、本地规则算倾向、本地 SecureRandom 投币。应用名集中在 `app/src/main/res/values/strings.xml`。
 
-新版为 `偏心硬币-安卓-1.4.2.apk`，Release 构建、关闭调试，沿用原签名，versionCode 为 10。支持 GitHub Releases 在线检查、下载与校验安装。保留媒体音效、上下翻转、牛奶白/金色界面、居中问号与修改按钮、完整 API 接口。可直接覆盖旧版，不要先卸载。
+新版为 `偏心硬币-安卓-1.4.3.apk`，Release 构建、关闭调试，沿用原签名，versionCode 为 11。支持 GitHub Releases 在线检查、下载与校验安装。保留媒体音效、上下翻转、牛奶白/金色界面、居中问号与修改按钮、完整 API 接口。可直接覆盖旧版，不要先卸载。
 
 从 [GitHub Releases 下载安卓安装包](https://github.com/wang503133712-commits/coin-decision/releases/latest)。App 默认预填官方仓库 `wang503133712-commits/coin-decision`，在“设置 → 版本与更新”点击“保存并检查更新”即可；自行设置过其他仓库的用户配置保留。使用与发布见 [GITHUB_UPDATES.md](GITHUB_UPDATES.md)。
 
@@ -31,7 +31,7 @@ cd 'C:\Users\Administrator\Documents\Codex\2026-10-10\files-pasted-by-the-user-a
 & 'F:\ComfyAutomation\android-toolchain\sdk\platform-tools\adb.exe' -s <设备序号> install -r .\app\build\outputs\apk\release\app-release.apk
 ```
 
-也可把 APK 发到安卓手机，点开后按系统提示安装。旧版“设置 → 版本与更新 → 选择 APK 更新包”也可导入本次 1.4.2 包。新版该入口名为“选择本地 APK 更新包”。仍使用本项目原有固定签名，未上架应用商店。
+也可把 APK 发到安卓手机，点开后按系统提示安装。旧版“设置 → 版本与更新 → 选择 APK 更新包”也可导入本次 1.4.3 包。新版该入口名为“选择本地 APK 更新包”。仍使用本项目原有固定签名，未上架应用商店。
 
 ## 写下问题并让 AI 出题
 

@@ -546,10 +546,10 @@ private fun time(value: Long) = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHIN
     Text(if (state.hasKey) "已为当前地址保存加密 Key" else "当前地址未配置 Key", style = MaterialTheme.typography.bodySmall)
     Text("API Key 是服务商提供的调用密钥，不是账号密码。DeepSeek 只是默认服务商，不是唯一选择；地址、模型 ID、Key 必须来自同一服务。", style = MaterialTheme.typography.bodySmall)
     Panel {
-        Text(if (model.isBlank()) "尚未选择模型" else "当前模型：$model" + if (model == "deepseek-flash" && runCatching { validatedBaseUrl(base).host == "api.deepseek.com" }.getOrDefault(false)) "（默认，无需填写）" else "", fontWeight = FontWeight.Bold)
+        Text(if (model.isBlank()) "请选择调用模型" else "当前模型：$model" + if (model == "deepseek-flash" && runCatching { validatedBaseUrl(base).host == "api.deepseek.com" }.getOrDefault(false)) "（默认，无需填写）" else "", fontWeight = FontWeight.Bold)
         Text("默认模型已预设。换其他服务可读取可用模型；只有一个时自动选用，有多个时保留已有选择或点选。列表不保证每个模型都支持出题所需的 JSON 接口。", style = MaterialTheme.typography.bodySmall)
         OutlinedButton(onClick = { modelsConfirm = true }, enabled = !state.testing, modifier = Modifier.fillMaxWidth()) { Text("自动读取可用模型") }
-        if (models.isNotEmpty()) TextButton(onClick = { chooseModel = true }) { Text("从 ${models.size} 个模型中选择") }
+        if (models.isNotEmpty()) TextButton(onClick = { chooseModel = true }) { Text("请选择调用模型") }
         TextButton(onClick = { manualModel = !manualModel }) { Text(if (manualModel) "收起高级设置" else "高级：手动填写模型 ID") }
         if (manualModel) OutlinedTextField(model, { model = it.take(100) }, label = { Text("模型 ID（接口调用名称）") },
             supportingText = { Text("仅在接口不提供模型列表或需自定义模型时填写服务商给出的准确名称。") }, modifier = Modifier.fillMaxWidth())
@@ -557,7 +557,7 @@ private fun time(value: Long) = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHIN
     if (modelsConfirm) ConfirmDialog("读取可用模型？", "使用 API Key 向 $base 读取模型列表。不发送事项、回答或历史，不生成题目。新填的 Key 仅用于这次读取，点击保存设置后才加密保存。", { modelsConfirm = false }) {
         modelsConfirm = false; vm.loadModels(base.trim(), key.trim())
     }
-    if (chooseModel) AlertDialog(onDismissRequest = { chooseModel = false }, title = { Text("选择用于出题的模型") },
+    if (chooseModel) AlertDialog(onDismissRequest = { chooseModel = false }, title = { Text("请选择调用模型") },
         text = { LazyColumn(Modifier.heightIn(max = 320.dp)) { items(models) { id ->
             TextButton(onClick = { model = id; chooseModel = false }, modifier = Modifier.fillMaxWidth()) { Text(id) }
         } } }, confirmButton = { TextButton(onClick = { chooseModel = false }) { Text("关闭") } })
