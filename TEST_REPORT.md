@@ -7,9 +7,11 @@
 - versionName 1.3.1、versionCode 7，保持原包名、签名、API 与数据库；非调试 Release。
 - 29 项单元测试通过，0 失败；lint 0 错误、13 项既有警告。
 - 1.3.0 → 1.3.1 覆盖升级：APK 检查、历史快照/结果引用及加密虚构 Key 保留，三个独立阶段通过。
-- 19 项 Release 设备回归中 14 项通过、5 项需独立参数的用例跳过，0 失败。升级三项和未来同签名 APK 下载一项已独立执行通过；第五项为发布后才能执行的真实 GitHub 联网测试。
+- 19 项 Release 设备回归中 14 项通过、5 项需独立参数的用例跳过，0 失败。升级三项、未来同签名 APK 下载一项和真实 GitHub 下载一项，均已在独立阶段执行通过。
 - 未来 APK 夹具为 1.3.2/code 8，模拟发布信息到实际安卓包名/签名/版号校验链路通过，错误标签实际被拒绝。
-- 待发布后执行真实 GitHubUpdates 最新发布检查和下载，并核对下载 APK 与已安装最终 Release 的 SHA-256 完全相同；结果另存 verification-1.3.1/github-live-download.txt。
+- 已正式发布 v1.3.1，APK、源码 ZIP 和 Git bundle 的下载链接在 Release 页可见，APK digest 与本机一致。GitHub 发布标签对应源码树与本地 v1.3.1 的 Git tree SHA 完全一致：41a1509572202f26f803da6b5742dce0bb7dce02。
+- 发布后实际调用 GitHubUpdates，通过公开 GitHub API 检查最新版、经 GitHub CDN 下载完整 APK，核对 SHA-256 与已安装最终 Release 完全相同；设备测试 26.139 秒，OK (1 test)，记录在 verification-1.3.1/github-live-download.txt。这是实际联网结果，没有用模拟响应替代。
+- 测试模拟器原本 Wi-Fi 与移动数据均关闭，最初出现 DNS/网络不可达；开启该专用模拟器网络并使用电脑已有代理后通过，未更改宿主电脑网络或 TLS 校验。初始失败记录保留在 network-before-wifi-fix.txt；原生 Git 读取中断通过单次使用已有代理恢复，上传使用 GitHub 连接器完成。
 
 APK SHA-256：`9592ee0cfbc57d31ea814d1252bbff459a3997213c5d78fbc1a98502f478b635`。签名材料、个人 Key、缓存和设备数据不会上传；源码 ZIP 和版本历史 bundle 排除私密签名。
 
